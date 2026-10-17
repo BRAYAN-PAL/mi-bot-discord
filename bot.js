@@ -1,26 +1,25 @@
-// bot.js — Chat con IA 🤖 (Gemini) para Discord
+// bot.js — Chat con IA 🤖 (Groq/Llama3) para Discord
 require("dotenv").config();
 
 const http = require("http");
 const { Client, GatewayIntentBits, Events, EmbedBuilder, ChannelType } = require("discord.js");
-const { GoogleGenAI } = require("@google/genai");
+const Groq = require("groq-sdk");
 
 const TOKEN = process.env.TOKEN;
 const GUILD_ID = process.env.GUILD_ID || "1521594932006223872";
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const PORT = process.env.PORT || 3000;
-const COOLDOWN_MS = 6000; // espera entre preguntas por usuario
+const COOLDOWN_MS = 6000;
 
 if (!TOKEN) {
   console.error("❌ Falta TOKEN");
   process.exit(1);
 }
-if (!GEMINI_API_KEY) console.warn("⚠️ Falta GEMINI_API_KEY: la IA no responderá.");
+if (!GROQ_API_KEY) console.warn("⚠️ Falta GROQ_API_KEY: la IA no responderá.");
 
-// Cliente de Gemini
-const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+// Cliente de Groq
+const groq = new Groq({ apiKey: GROQ_API_KEY });
 
-// Servidor web mínimo (Render lo necesita y sirve para el "ping" anti-sueño)
 http
   .createServer((req, res) => {
     res.writeHead(200, { "Content-Type": "text/plain" });
@@ -35,7 +34,6 @@ const client = new Client({
 let canalIA;
 const ultimoUso = new Map();
 
-// Parte textos largos en trozos para respetar el límite de Discord (2000)
 function partir(texto, max = 1900) {
   const trozos = [];
   let resto = texto;
@@ -50,7 +48,6 @@ function partir(texto, max = 1900) {
   return trozos;
 }
 
-// Arma el contexto con los últimos mensajes del canal (última hora)
 async function construirHistorial(msg) {
   const lote = await msg.channel.messages.fetch({ limit: 12 });
   const limite = Date.now() - 60 * 60 * 1000;
@@ -62,49 +59,46 @@ async function construirHistorial(msg) {
     if (!texto) continue;
 
     if (m.author.id === client.user.id) {
-      if (texto.startsWith("⚠️")) continue; // ignora mensajes de error
-      mensajes.push({ role: "model", parts: [{ text: texto }] });
+      if (texto.startsWith("⚠️")) continue;
+      mensajes.push({ role: "assistant", content: texto });
     } else if (!m.author.bot) {
       const nombre = m.member?.displayName ?? m.author.username;
-      mensajes.push({ role: "user", parts: [{ text: `${nombre}: ${texto}` }] });
+      mensajes.push({ role: "user", content: `${nombre}: ${texto}` });
     }
   }
 
-  // Unir turnos consecutivos del mismo rol (Gemini requiere alternancia estricta)
   const unido = [];
   for (const m of mensajes) {
     const ultimo = unido[unido.length - 1];
-    if (ultimo && ultimo.role === m.role) ultimo.parts[0].text += `\n${m.parts[0].text}`;
+    if (ultimo && ultimo.role === m.role) ultimo.content += `\n${m.content}`;
     else unido.push({ ...m });
   }
-  while (unido.length && unido[0].role !== "user") unido.shift();
   return unido;
 }
 
 async function preguntarIA(nombreServidor, mensajesHistorial) {
-  const systemInstruction = 
-    `Eres el asistente de IA del servidor de Discord "${nombreServidor}". ` +
-    "Responde en el idioma del usuario (normalmente español), con tono amigable, claro y conciso (menos de 1500 caracteres). " +
-    "En este canal hablan varias personas y sus mensajes llevan su nombre al inicio. " +
-    "No uses @everyone ni @here. Si no sabes algo, dilo con honestidad.";
+  const systemMessage = {
+    role: "system",
+    content: `Eres el asistente de IA del servidor de Discord "${nombreServidor}". ` +
+      "Responde en el idioma del usuario (normalmente español), con tono amigable, claro y conciso (menos de 1500 caracteres). " +
+      "En este canal hablan varias personas y sus mensajes llevan su nombre al inicio. " +
+      "No uses @everyone ni @here. Si no sabes algo, dilo con honestidad."
+  };
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-3.8-flash', // 👈 ¡Cambia solo esta línea!
-    contents: mensajesHistorial,
-    config: {
-      systemInstruction: systemInstruction,
-    }
+  const response = await groq.chat.completions.create({
+    messages: [systemMessage, ...mensajesHistorial],
+    model: "llama3-8b-8192", // Modelo súper rápido
   });
   
-  return response.text || "…";
+  return response.choices[0]?.message?.content || "…";
 }
 
 client.on(Events.MessageCreate, async (msg) => {
   if (msg.author.bot || msg.guildId !== GUILD_ID || !canalIA || msg.channelId !== canalIA.id) return;
   if (!msg.content.trim()) return;
 
-  if (!GEMINI_API_KEY) {
-    return msg.reply("⚠️ La IA no está configurada todavía (falta la clave de API).").catch(() => {});
+  if (!GROQ_API_KEY) {
+    return msg.reply("⚠️ La IA no está configurada (falta la clave de API).").catch(() => {});
   }
 
   const ahora = Date.now();
@@ -144,14 +138,6 @@ client.once(Events.ClientReady, async (c) => {
         name: "🤖┃chat-ia",
         type: ChannelType.GuildText,
         topic: "Habla con la IA: escribe tu pregunta y te responde",
-      });
-      await canalIA.send({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(0x5865f2)
-            .setTitle("🤖 Chat con IA")
-            .setDescription("Escribe cualquier pregunta en este canal y la IA te responderá. Hay una pequeña espera entre mensajes."),
-        ],
       });
       console.log("➕ Canal creado: 🤖┃chat-ia");
     }
