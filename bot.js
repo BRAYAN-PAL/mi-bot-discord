@@ -87,7 +87,7 @@ async function preguntarIA(nombreServidor, mensajesHistorial) {
 
   const response = await groq.chat.completions.create({
     messages: [systemMessage, ...mensajesHistorial],
-    model: "llama-3.1-8b-instant", // 👈 Cambiamos el modelo aquí
+    model: "mixtral-8x7b-32768", // 👈 Cambiamos a este modelo súper estable
   });
   
   return response.choices[0]?.message?.content || "…";
