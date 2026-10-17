@@ -87,7 +87,7 @@ async function preguntarIA(nombreServidor, mensajesHistorial) {
 
   const response = await groq.chat.completions.create({
     messages: [systemMessage, ...mensajesHistorial],
-    model: "gpt-oss-20b", // 👈 Probamos con el nuevo modelo de tu panel
+    model: "openai/gpt-oss-20b", // 👈 ¡Ahora sí, el código exacto!
   });
   
   return response.choices[0]?.message?.content || "…";
