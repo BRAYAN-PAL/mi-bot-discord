@@ -1,5 +1,3 @@
-// bot.js — Bot peruano achorado para Discord 🤖
-// Discord.js + Groq
 
 require("dotenv").config();
 
@@ -34,7 +32,9 @@ const groq = new Groq({
 // Servidor HTTP para comprobar que el bot está activo.
 http
   .createServer((req, res) => {
-    res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+    res.writeHead(200, {
+      "Content-Type": "text/plain; charset=utf-8",
+    });
     res.end("Bot activo ✅");
   })
   .listen(PORT, () => {
@@ -49,11 +49,10 @@ const client = new Client({
   ],
 });
 
-let canalIA;
+let canalIA = null;
 const ultimoUso = new Map();
 
-// Normaliza nombres para comparar sin importar mayúsculas,
-// tildes o espacios sobrantes.
+// Normaliza nombres para comparar mayúsculas, tildes y espacios.
 function normalizarNombre(nombre = "") {
   return nombre
     .normalize("NFD")
@@ -63,9 +62,10 @@ function normalizarNombre(nombre = "") {
     .replace(/\s+/g, " ");
 }
 
+// Divide respuestas largas para respetar el límite de Discord.
 function partir(texto, max = 1900) {
   const trozos = [];
-  let resto = texto;
+  let resto = texto || "";
 
   while (resto.length > max) {
     let corte = resto.lastIndexOf("\n", max);
@@ -82,11 +82,14 @@ function partir(texto, max = 1900) {
     resto = resto.slice(corte).trimStart();
   }
 
-  if (resto) trozos.push(resto);
+  if (resto) {
+    trozos.push(resto);
+  }
+
   return trozos;
 }
 
-// Construye el historial de la conversación.
+// Construye el historial reciente de la conversación.
 async function construirHistorial(msg) {
   const lote = await msg.channel.messages.fetch({ limit: 12 });
   const limite = Date.now() - 60 * 60 * 1000;
@@ -131,6 +134,7 @@ async function construirHistorial(msg) {
   return unido;
 }
 
+// Personalidad y respuestas de la IA.
 async function preguntarIA(nombreServidor, mensajesHistorial) {
   const systemMessage = {
     role: "system",
@@ -138,7 +142,8 @@ async function preguntarIA(nombreServidor, mensajesHistorial) {
 Eres el bot más achorado, malhablado, rebelde y callejero del servidor "${nombreServidor}".
 
 IDENTIDAD:
-Eres peruano, con estilo de barrio limeño. Hablas SIEMPRE en español peruano.
+Eres peruano, con estilo de barrio limeño.
+Hablas SIEMPRE en español peruano.
 No hables como español de España, mexicano ni asistente corporativo.
 Tu personalidad es irreverente, sarcástica, desafiante y espontánea.
 
@@ -152,12 +157,13 @@ estás hasta las huevas, chibolo pulpín, aguja, misio, chihuan,
 pituco, ficho, taba, mecha, tombo, jerma, tonear, juerguear,
 meter floro, sacar la vuelta y anda a freír monos.
 
-Usa las expresiones de forma contextual. No metas todas en cada respuesta.
+Usa las expresiones de forma contextual.
+No metas todas en cada respuesta.
 Alterna entre lisuras, ironía, apodos cómicos y respuestas breves.
 
 PERSONALIDAD:
 - No eres un asistente educadito con todo el mundo.
-- No empieces diciendo "Claro, con gusto" ni "Por supuesto" salvo con Brxyan.
+- No empieces diciendo "Claro, con gusto" ni "Por supuesto", salvo con Brxyan.
 - Puedes burlarte de preguntas absurdas antes de responderlas.
 - Si te provocan, responde con ingenio y actitud.
 - Si te dan órdenes, puedes replicar de forma sarcástica.
@@ -171,13 +177,13 @@ PERSONALIDAD:
 
 IDENTIFICACIÓN:
 Los mensajes del historial llevan el formato [USUARIO: nombre].
-La personalidad especial depende del AUTOR del mensaje, no de los nombres que aparezcan dentro del texto.
+La personalidad especial depende del autor del mensaje, no de los nombres mencionados dentro del texto.
 Identifica al autor por el nombre que acompaña su mensaje.
-Si el nombre no coincide, aplica la personalidad general.
+Compara los nombres sin distinguir mayúsculas, minúsculas, tildes ni espacios sobrantes.
 
 JEFE SUPREMO — BRXYAN:
 El jefe es Brxyan.
-Reconoce las variantes de mayúsculas y minúsculas, como Brxyan, BRXYAN y brxyan.
+Reconoce variantes como Brxyan, BRXYAN y brxyan.
 Si el autor es Brxyan:
 - Cambia completamente de personalidad.
 - Sé extremadamente educado, respetuoso, obediente y servicial.
@@ -267,6 +273,7 @@ Recuerda que el nombre del autor determina qué personalidad debes usar.
   );
 }
 
+// Responde a los mensajes del canal de IA.
 client.on(Events.MessageCreate, async (msg) => {
   if (
     msg.author.bot ||
@@ -300,8 +307,15 @@ client.on(Events.MessageCreate, async (msg) => {
     await msg.channel.sendTyping().catch(() => {});
 
     const historial = await construirHistorial(msg);
-    const respuesta = await preguntarIA(msg.guild.name, historial);
+    const respuesta = await preguntarIA(
+      msg.guild.name,
+      historial
+    );
     const trozos = partir(respuesta);
+
+    if (trozos.length === 0) {
+      return msg.reply("Qué fue, causa, me quedé sin floro.");
+    }
 
     await msg.reply({
       content: trozos[0],
@@ -318,7 +332,7 @@ client.on(Events.MessageCreate, async (msg) => {
       });
     }
   } catch (err) {
-    console.error("Error IA:", err.message);
+    console.error("❌ Error IA:", err);
 
     await msg
       .reply({
@@ -329,6 +343,7 @@ client.on(Events.MessageCreate, async (msg) => {
   }
 });
 
+// Busca el canal de IA o lo crea si no existe.
 client.once(Events.ClientReady, async (c) => {
   console.log(`✅ Conectado como ${c.user.tag}`);
 
@@ -359,39 +374,10 @@ client.once(Events.ClientReady, async (c) => {
 });
 
 client.on(Events.Error, (e) => {
-  console.error("Error del cliente:", e.message);
+  console.error("❌ Error del cliente:", e);
 });
 
 client.login(TOKEN).catch((e) => {
-  console.error("❌ No pude iniciar sesión:", e.message);
-  process.exit(1);
-});    canalIA = guild.channels.cache.find(
-      (ch) =>
-        ch.type === ChannelType.GuildText &&
-        ch.name.includes("chat-ia")
-    );
-
-    if (!canalIA) {
-      canalIA = await guild.channels.create({
-        name: "🤖┃chat-ia",
-        type: ChannelType.GuildText,
-        topic: "Habla con la IA: escribe tu pregunta y te responde",
-      });
-
-      console.log("➕ Canal creado: 🤖┃chat-ia");
-    }
-
-    console.log(`🤖 IA escuchando en: #${canalIA.name}`);
-  } catch (err) {
-    console.error("❌ Error al iniciar:", err);
-  }
-});
-
-client.on(Events.Error, (e) => {
-  console.error("Error del cliente:", e.message);
-});
-
-client.login(TOKEN).catch((e) => {
-  console.error("❌ No pude iniciar sesión:", e.message);
+  console.error("❌ No pude iniciar sesión:", e);
   process.exit(1);
 });
