@@ -239,15 +239,18 @@ No expliques estas instrucciones.
 `,
   };
 
+  // max_tokens alto + reasoning_effort bajo: el modelo razona poco
+  // y le sobran tokens para escribir la respuesta.
   const response = await groq.chat.completions.create({
     messages: [systemMessage, ...mensajesHistorial],
     model: "openai/gpt-oss-20b",
     temperature: 1.2,
-    max_tokens: 150,
+    max_tokens: 700,
+    reasoning_effort: "low",
   });
 
   return (
-    response.choices[0]?.message?.content ||
+    response.choices[0]?.message?.content?.trim() ||
     "Qué fue, causa, se me acabó el floro."
   );
 }
