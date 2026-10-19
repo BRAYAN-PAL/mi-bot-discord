@@ -295,7 +295,7 @@ client.on(Events.MessageCreate, async (msg) => {
     const trozos = partir(respuesta);
 
     if (trozos.length === 0) {
-      return msg.reply("Qué fue, causa, me quedé sin floro.");
+      return msg.reply("peren pe toy recargando mi peleta");
     }
 
     await msg.reply({
@@ -317,7 +317,7 @@ client.on(Events.MessageCreate, async (msg) => {
 
     await msg
       .reply({
-        content: "⚠️ La IA falló, intenta de nuevo en un momento.",
+        content: "⚠️ tengo errores espen un toke paisanos.",
         allowedMentions: { parse: [] },
       })
       .catch(() => {});
